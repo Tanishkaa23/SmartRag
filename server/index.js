@@ -11,6 +11,8 @@ import searchRoutes from "./src/routes/searc.routes.js";
 import chatRoutes from './src/routes/chat.routes.js'
 import analyticRoutes from "./src/routes/analytic.routes.js";
 
+import errorHandler from "./src/middlewares/error.middleware.js";
+
 
 dotenv.config();
 
@@ -68,6 +70,13 @@ app.use("/api/search",searchRoutes)
 app.use("/api/chat",chatRoutes)
 app.use("/api/analytics",analyticRoutes)
 
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.originalUrl}`,
+  });
+});
+app.use(errorHandler);
 
 const startServer = async () => {
   try {
