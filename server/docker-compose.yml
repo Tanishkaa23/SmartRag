@@ -1,0 +1,25 @@
+services:
+ redis:
+  image: redis
+  container_name: redis-smartRag
+  ports:
+    - "6379:6379"
+
+ mongodb:
+  image: mongo
+  container_name: mongo-smartRag
+  ports:
+    - "27017:27017"
+
+ qdrant:
+  image: qdrant/qdrant:latest
+  container_name: qdrant-smartRag
+  ports:
+    - "6333:6333"
+    - "6334:6334"
+  volumes:
+    - qdrant_data:/qdrant/storage
+
+volumes:
+  mongo_data:
+  qdrant_data:
