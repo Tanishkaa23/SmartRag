@@ -21,12 +21,26 @@ const messageSchema = new mongoose.Schema(
     score: Number,
   },
 ],
+    mode: {
+      type: String,
+      enum: ["auto", "document", "general"],
+    },
+    answerSource: {
+      type: String,
+      enum: ["documents", "general"],
+    },
   },
   { timestamps: true }
 );
 
 const chatSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     title: {
       type: String,
       default: "New Chat",

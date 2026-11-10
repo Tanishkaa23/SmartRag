@@ -1,8 +1,7 @@
 import QueryMetric from "../models/queryMetric.model.js";
 export const recordMetric = async (data) => {
-  try {
-    await QueryMetric.create(data);
-  } catch (error) {
-    console.error("Failed to record analytics:", error.message);
+  if (!data.userId) {
+    throw new Error("A user ID is required to record analytics");
   }
+  await QueryMetric.create(data);
 };

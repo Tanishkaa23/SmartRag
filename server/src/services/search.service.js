@@ -3,40 +3,40 @@ import embeddings from "../config/embeddings.js";
 
 const COLLECTION_NAME = "smartrag_documents";
 
-export const searchDocuments = async (query, documentIds = []) => {
+export const searchDocuments = async (query, userId, documentIds = []) => {
+  if (!userId) {
+    throw new Error("A user ID is required to search documents");
+  }
+
   // Generate query embedding
   const queryVector = await embeddings.embedQuery(query);
 
-  // Build Qdrant filter
-  const searchFilter = documentIds.length > 0
-    ? {
-        must: [
-          {
-            key: "documentId",
-            match: {
-              any: documentIds,
-            },
-          },
-        ],
-      }
-    : undefined;
+  const must = [
+    {
+      key: "userId",
+      match: { value: String(userId) },
+    },
+  ];
+  if (documentIds.length > 0) {
+    must.push({
+      key: "documentId",
+      match: { any: documentIds },
+    });
+  }
 
-  // Search Qdrant
   const response = await qdrantClient.query(COLLECTION_NAME, {
     query: queryVector,
     limit: 3,
     with_payload: true,
-    filter: searchFilter,
+    filter: { must },
   });
 
-  
-return response.points.map((point) => ({
-  text: point.payload.text,
-  score: point.score,
-  filename: point.payload.filename,
-  documentId: point.payload.documentId,
-  pageNumber: point.payload.pageNumber,
-  chunkIndex: point.payload.chunkIndex,
-}));
-
+  return response.points.map((point) => ({
+    text: point.payload.text,
+    score: point.score,
+    filename: point.payload.filename,
+    documentId: point.payload.documentId,
+    pageNumber: point.payload.pageNumber,
+    chunkIndex: point.payload.chunkIndex,
+  }));
 };

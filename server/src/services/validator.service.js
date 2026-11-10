@@ -40,3 +40,27 @@ Return only YES or NO.
 
   return result === "YES";
 };
+
+export const validateDocumentRelevance = async (query, results) => {
+  if (!Array.isArray(results) || results.length === 0) return false;
+
+  const context = results
+    .map((item, index) => `Passage ${index + 1}:\n${item.text}`)
+    .join("\n\n");
+  const prompt = `
+Determine whether the provided document passages contain information that can answer the user's question.
+
+QUESTION:
+${query}
+
+DOCUMENT PASSAGES:
+${context}
+
+Return YES only when the passages contain information directly useful to answer the question.
+Return NO when they are unrelated, only share broad keywords, or do not provide enough information.
+Return only YES or NO.
+`;
+
+  const response = await validatorModel.invoke(prompt);
+  return String(response.content).trim().toUpperCase() === "YES";
+};

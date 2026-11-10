@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 
 import connectDB from "./src/config/db.js";
@@ -10,11 +10,9 @@ import documentRoutes from './src/routes/document.routes.js'
 import searchRoutes from "./src/routes/searc.routes.js";
 import chatRoutes from './src/routes/chat.routes.js'
 import analyticRoutes from "./src/routes/analytic.routes.js";
+import authRoutes from "./src/routes/auth.routes.js";
 
 import errorHandler from "./src/middlewares/error.middleware.js";
-
-
-dotenv.config();
 
 const app = express();
 
@@ -69,6 +67,7 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/search",searchRoutes)
 app.use("/api/chat",chatRoutes)
 app.use("/api/analytics",analyticRoutes)
+app.use("/api/auth",authRoutes)
 
 app.use((req, res, next) => {
   res.status(404).json({
@@ -80,6 +79,10 @@ app.use(errorHandler);
 
 const startServer = async () => {
   try {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < 32) {
+      throw new Error("JWT_SECRET must be configured with at least 32 characters");
+    }
+
     await connectDB();
 
     await redis.ping();

@@ -34,7 +34,10 @@ const createCollectionIfNotExists = async () => {
 
 
 // Store document chunks
-export const storeChunks = async (chunks) => {
+export const storeChunks = async (chunks, userId) => {
+  if (!userId) {
+    throw new Error("A user ID is required to store document chunks");
+  }
   if (!chunks || chunks.length === 0) {
     throw new Error("No chunks provided for storage");
   }
@@ -74,6 +77,7 @@ export const storeChunks = async (chunks) => {
     vector: vectors[index],
     payload: {
   text: chunk.pageContent,
+  userId: String(userId),
   filename: chunk.metadata.filename,
   documentId: String(chunk.metadata.documentId),
   source: chunk.metadata.source,
@@ -105,16 +109,19 @@ export const storeChunks = async (chunks) => {
 };
 
 
-// Delete document chunks
+export const deleteDocumentChunks = async (userId, documentId) => {
+  if (!userId || !documentId) {
+    throw new Error("A user ID and document ID are required to delete document chunks");
+  }
 
-
-
-export const deleteDocumentChunks = async (documentId, filename) => {
-  // Delete newer chunks using documentId
   await qdrantClient.delete(COLLECTION_NAME, {
     wait: true,
     filter: {
       must: [
+        {
+          key: "userId",
+          match: { value: String(userId) },
+        },
         {
           key: "documentId",
           match: { value: documentId },
@@ -122,37 +129,4 @@ export const deleteDocumentChunks = async (documentId, filename) => {
       ],
     },
   });
-
-  // Delete legacy chunks using filename
-  await qdrantClient.delete(COLLECTION_NAME, {
-    wait: true,
-    filter: {
-      must: [
-        {
-          key: "filename",
-          match: { value: filename },
-        },
-      ],
-    },
-  });
 };
-
-
-export const inspectQdrantDocuments = async () => {
-  const response = await qdrantClient.scroll(COLLECTION_NAME, {
-    limit: 10,
-    with_payload: true,
-    with_vector: false,
-  });
-
-  console.log(
-    "QDRANT STORED PAYLOADS:",
-    response.points.map((point) => ({
-      filename: point.payload.filename,
-      documentId: point.payload.documentId,
-      pageNumber: point.payload.pageNumber,
-      chunkIndex: point.payload.chunkIndex,
-    }))
-  );
-};
-

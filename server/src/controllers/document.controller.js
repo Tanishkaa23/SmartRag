@@ -7,10 +7,11 @@ import {
 import {
   storeChunks,
   deleteDocumentChunks,
-  inspectQdrantDocuments
 } from "../services/vector.service.js";
 
 import Document from "../models/document.model.js";
+import mongoose from "mongoose";
+import { invalidateCachedAnswersForDocument } from "../services/cache.service.js";
 
 
 
@@ -37,6 +38,7 @@ export const uploadDocument = async (req, res) => {
 
         // Create MongoDB record first
         document = await Document.create({
+          userId: req.user._id,
           filename: file.originalname,
           originalName: file.originalname,
           fileSize: file.size,
@@ -46,9 +48,6 @@ export const uploadDocument = async (req, res) => {
 
         // Extract PDF page by page
         const pages = await extractPDFText(file.buffer);
-
-        console.log("EXTRACTED PAGES:", pages.length);
-        console.log("FIRST PAGE:", pages[0]);
 
         if (!pages || pages.length === 0) {
           throw new Error("No readable text found in PDF");
@@ -70,7 +69,7 @@ export const uploadDocument = async (req, res) => {
         });
 
         // Store vectors in Qdrant
-        const storedChunks = await storeChunks(chunks);
+        const storedChunks = await storeChunks(chunks, req.user._id.toString());
 
         // Update MongoDB record
         document.totalChunks = storedChunks;
@@ -80,19 +79,26 @@ export const uploadDocument = async (req, res) => {
         uploadedDocuments.push(document);
 
       } catch (error) {
-        console.error(
-          `Failed to process ${file.originalname}:`,
-          error.message
-        );
+        console.error(`Failed to process ${file.originalname}:`, error.message);
 
         if (document) {
+          let cleanupMessage = "";
+          try {
+            await deleteDocumentChunks(req.user._id.toString(), document._id.toString());
+          } catch (cleanupError) {
+            console.error(`Failed to clean up vectors for ${file.originalname}:`, cleanupError.message);
+            cleanupMessage = " Vector cleanup failed; contact an administrator.";
+          }
           document.status = "failed";
           await document.save();
+          error.message += cleanupMessage;
         }
 
         failedDocuments.push({
           filename: file.originalname,
-          error: error.message,
+          error: process.env.NODE_ENV === "production"
+            ? "The PDF could not be processed."
+            : error.message,
         });
       }
     }
@@ -114,7 +120,7 @@ export const uploadDocument = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to process documents",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 };
@@ -122,9 +128,7 @@ export const uploadDocument = async (req, res) => {
 
 export const getAllDocuments = async (req, res) => {
   try {
-    const documents = await Document.find().sort({ createdAt: -1 });
-
-    await inspectQdrantDocuments();
+    const documents = await Document.find({ userId: req.user._id }).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -146,7 +150,11 @@ export const getDocumentById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const document = await Document.findById(id);
+    if (!mongoose.isObjectIdOrHexString(id)) {
+      return res.status(400).json({ success: false, message: "Invalid document ID" });
+    }
+
+    const document = await Document.findOne({ _id: id, userId: req.user._id });
 
     if (!document) {
       return res.status(404).json({
@@ -161,10 +169,10 @@ export const getDocumentById = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Fetch document error:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch document",
-      error: error.message,
     });
   }
 };
@@ -174,7 +182,11 @@ export const deleteDocument = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const document = await Document.findById(id);
+    if (!mongoose.isObjectIdOrHexString(id)) {
+      return res.status(400).json({ success: false, message: "Invalid document ID" });
+    }
+
+    const document = await Document.findOne({ _id: id, userId: req.user._id });
 
     if (!document) {
       return res.status(404).json({
@@ -183,11 +195,9 @@ export const deleteDocument = async (req, res) => {
       });
     }
 
-await deleteDocumentChunks(
-  document._id.toString(),
-  document.filename
-);
-    await Document.findByIdAndDelete(id);
+    await deleteDocumentChunks(req.user._id.toString(), document._id.toString());
+    await invalidateCachedAnswersForDocument(req.user._id.toString(), document._id.toString());
+    await Document.deleteOne({ _id: document._id, userId: req.user._id });
 
     return res.status(200).json({
       success: true,
@@ -200,7 +210,6 @@ await deleteDocumentChunks(
     return res.status(500).json({
       success: false,
       message: "Failed to delete document",
-      error: error.message,
     });
   }
 };

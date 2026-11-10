@@ -1,8 +1,9 @@
 import { searchDocuments } from "../services/search.service.js";
+import { validateDocumentAccess } from "../services/documentAccess.service.js";
 
 export const searchDocumentsController = async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, documentIds = [] } = req.body || {};
 
     if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({
@@ -10,7 +11,8 @@ export const searchDocumentsController = async (req, res) => {
       });
     }
 
-    const results = await searchDocuments(query.trim());
+    const ownedDocumentIds = await validateDocumentAccess(req.user._id, documentIds);
+    const results = await searchDocuments(query.trim(), req.user._id.toString(), ownedDocumentIds);
 
     return res.status(200).json({
       message: "Search successful",
@@ -21,9 +23,9 @@ export const searchDocumentsController = async (req, res) => {
   } catch (error) {
     console.error("Search error:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       message: "Failed to search documents",
-      error: error.message,
+      error: error.statusCode ? error.message : "Search failed",
     });
   }
 };

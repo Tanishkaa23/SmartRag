@@ -3,6 +3,7 @@ import QueryMetric from "../models/queryMetric.model.js";
 export const getAnalytics = async (req, res) => {
   try {
     const metrics = await QueryMetric.aggregate([
+      { $match: { userId: req.user._id } },
       {
         $group: {
           _id: null,
@@ -32,6 +33,21 @@ export const getAnalytics = async (req, res) => {
             },
           },
 
+          autoQueries: {
+            $sum: { $cond: [{ $eq: ["$queryMode", "auto"] }, 1, 0] },
+          },
+          documentModeQueries: {
+            $sum: { $cond: [{ $eq: ["$queryMode", "document"] }, 1, 0] },
+          },
+          generalModeQueries: {
+            $sum: { $cond: [{ $eq: ["$queryMode", "general"] }, 1, 0] },
+          },
+          documentAnswers: {
+            $sum: { $cond: [{ $eq: ["$answerSource", "documents"] }, 1, 0] },
+          },
+          generalAnswers: {
+            $sum: { $cond: [{ $eq: ["$answerSource", "general"] }, 1, 0] },
+          },
           totalTokens: { $sum: "$totalTokens" },
         },
       },
@@ -44,6 +60,11 @@ export const getAnalytics = async (req, res) => {
       avgResponseTime: 0,
       simpleQueries: 0,
       advancedQueries: 0,
+      autoQueries: 0,
+      documentModeQueries: 0,
+      generalModeQueries: 0,
+      documentAnswers: 0,
+      generalAnswers: 0,
       totalTokens: 0,
     };
 
@@ -60,10 +81,10 @@ export const getAnalytics = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Analytics query failed:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to fetch analytics",
-      error: error.message,
     });
   }
 };

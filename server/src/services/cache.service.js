@@ -1,6 +1,7 @@
 
 import redis from "../config/redis.js";
 import { validateCachedAnswer } from "./validator.service.js";
+import { randomUUID } from "crypto";
 
 const CACHE_PREFIX = "semantic_cache:";
 
@@ -31,9 +32,13 @@ const cosineSimilarity = (a, b) => {
 export const findCachedAnswer = async (
   query,
   queryVector,
+  userId,
+  mode,
+  answerSource,
   documentIds = []
 ) => {
-  const keys = await redis.keys(`${CACHE_PREFIX}*`);
+  if (!userId) throw new Error("A user ID is required to search the semantic cache");
+  const keys = await redis.keys(`${CACHE_PREFIX}${userId}:*`);
 
   const normalizedIds = [...new Set(documentIds)].sort();
 
@@ -46,7 +51,10 @@ export const findCachedAnswer = async (
 
     const cached = JSON.parse(cachedData);
 
-    // Only compare entries from the same document scope
+    if (cached.userId !== String(userId)) continue;
+
+    if (cached.mode !== mode || cached.answerSource !== answerSource) continue;
+
     const cachedIds = [...new Set(cached.documentIds || [])].sort();
 
     if (JSON.stringify(cachedIds) !== JSON.stringify(normalizedIds)) {
@@ -69,6 +77,10 @@ export const findCachedAnswer = async (
       query: cached.query,
       answer: cached.answer,
       sources: cached.sources,
+      mode: cached.mode,
+      answerSource: cached.answerSource,
+      modelUsed: cached.modelUsed,
+      route: cached.route,
       similarity,
     });
   }
@@ -124,9 +136,15 @@ export const saveCachedAnswer = async (
   queryVector,
   answer,
   sources,
+  userId,
+  mode,
+  answerSource,
+  modelUsed,
+  route,
   documentIds = []
 ) => {
-  const key = `${CACHE_PREFIX}${Date.now()}-${Math.random()}`;
+  if (!userId) throw new Error("A user ID is required to save to the semantic cache");
+  const key = `${CACHE_PREFIX}${userId}:${randomUUID()}`;
 
   const normalizedIds = [...new Set(documentIds)].sort();
 
@@ -134,9 +152,14 @@ export const saveCachedAnswer = async (
     key,
     JSON.stringify({
       query,
+      userId: String(userId),
+      mode,
+      answerSource,
       embedding: queryVector,
       answer,
       sources,
+      modelUsed,
+      route,
       documentIds: normalizedIds,
     }),
     "EX",
@@ -144,3 +167,23 @@ export const saveCachedAnswer = async (
   );
 };
 
+export const invalidateCachedAnswersForDocument = async (userId, documentId) => {
+  if (!userId || !documentId) {
+    throw new Error("A user ID and document ID are required to invalidate the semantic cache");
+  }
+
+  const keys = await redis.keys(`${CACHE_PREFIX}${userId}:*`);
+  for (const key of keys) {
+    const cachedData = await redis.get(key);
+    if (!cachedData) continue;
+
+    const cached = JSON.parse(cachedData);
+    if (
+      cached.userId === String(userId) &&
+      ((cached.documentIds || []).includes(String(documentId)) ||
+        (cached.sources || []).some((source) => String(source.documentId) === String(documentId)))
+    ) {
+      await redis.del(key);
+    }
+  }
+};
