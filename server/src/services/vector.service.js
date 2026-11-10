@@ -30,6 +30,8 @@ const createCollectionIfNotExists = async () => {
   } else {
     console.log("Qdrant collection already exists");
   }
+
+  await createPayloadIndexesIfNotExists();
 };
 
 
@@ -129,4 +131,21 @@ export const deleteDocumentChunks = async (userId, documentId) => {
       ],
     },
   });
+};
+
+
+const createPayloadIndexesIfNotExists = async () => {
+  const indexes = [
+    { field_name: "userId", field_schema: "keyword" },
+    { field_name: "documentId", field_schema: "keyword" },
+  ];
+
+  for (const index of indexes) {
+    await qdrantClient.createPayloadIndex(
+      COLLECTION_NAME,
+      index
+    );
+
+    console.log(`Qdrant payload index ensured: ${index.field_name}`);
+  }
 };

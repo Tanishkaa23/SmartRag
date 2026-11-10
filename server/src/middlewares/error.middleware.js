@@ -1,15 +1,12 @@
 const errorHandler = (err, req, res, next) => {
-  console.error("API Error:", err.message);
+  console.error("API ERROR:", err);
+  console.error("STACK:", err.stack);
 
-  const statusCode = err.statusCode || err.status || (
-    err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FILE_COUNT" ? 413 : 500
-  );
+  const statusCode = err.statusCode || 500;
 
   res.status(statusCode).json({
     success: false,
-    message: statusCode >= 500 && process.env.NODE_ENV === "production"
-      ? "Internal Server Error"
-      : err.message || "Internal Server Error",
+    message: err.message || "Internal Server Error",
   });
 };
 
